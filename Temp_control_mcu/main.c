@@ -11,37 +11,83 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "lcd.h"
 
+/*
+** Global variables
+*/
 static uint8_t tm = 0;
 static uint8_t temp = 0;
 
-static uint8_t subMenu = 0;
-
+// Names
 const char *mode[4];
 const char *menu[4];
 const char *variables[2];
 
+// Variables
 static uint8_t max_temp = 0;
 static uint8_t min_temp = 0;
 
-static uint8_t fMode = 0;
-static uint8_t mMode = 0;
-static uint8_t mVar = 1;
-static uint8_t mSelect = 0;
+// Modes/menu
+static uint8_t fMode = 0;		// function/display mode
+static uint8_t mMode = 0;		// menu mode
+static uint8_t mVar = 1;		// menu variables
+static uint8_t mSelect = 0;		// menu select flag
+static uint8_t modeSelect = 0;	// working mode
+static uint8_t subMenu = 0;		// submenu flag
+
+/*
+** Moving average constants
+*/
+
+#define TOT_SAMPLES 32
+#define MOVAVG_SHIFT 5
+#define SUM_DIFF_THOLD TOT_SAMPLES/2    // 1/2LSB
+
+// Moving average structure
+typedef struct{
+	int8_t    samIdx;
+	uint32_t sum;
+	uint16_t samples[TOT_SAMPLES];
+}movAvg_t;
+
+volatile uint8_t updateLCD;
+uint16_t curAvg;
+uint8_t curTemp;
+uint8_t halfCelsius;
+uint8_t heater;
+
+uint16_t getMovAvg(uint16_t, movAvg_t *);
+uint16_t readAdc(uint8_t);
+void init_temp_ma(movAvg_t *, int8_t);
+void init_display();
+void init_adc();
+void init_tcnt1_1hz();
+void init_pwm();
+void set_pwm_dc(uint8_t);
 
 
 void showTemperature() {
-	char tmp[3];
+	/*char tmp[3];
 	tmp[0] = ' ' + temp / 10;
 	tmp[1] = '0' + temp % 10;
-	tmp[2] = '\0';
-	lcd_puts("Temperatura: ");
-	lcd_puts(tmp);
+	tmp[2] = '\0';*/
+	lcd_clrscr();
+
+	char adcStr[16];
+	itoa(temp, adcStr, 10);
+	
+	lcd_puts("Temp: ");
+	lcd_puts(adcStr);
+	lcd_putc('.');
+	halfCelsius ? lcd_putc('5') : lcd_putc('0');
+	lcd_putc(223);        //degree symbol
+	lcd_puts("C  ");
 	lcd_gotoxy(0, 1);
 	lcd_puts("Mode: ");
-	lcd_puts(mode[mSelect]);
+	lcd_puts(mode[modeSelect]);
 }
 
 // Starting message
@@ -53,9 +99,11 @@ void showMsg() {
 	lcd_puts_P("temp. control");
 }
 
+// TODO: check if switch is necessary
 void showMenu() {
 	lcd_putc('<');
 	
+	// Menu items
 	if (!subMenu){
 		switch (mMode) {
 			case 0:
@@ -75,24 +123,33 @@ void showMenu() {
 			lcd_puts(menu[mMode]);
 			break;
 		}
-	}else {
+		
+	// 'Variables' subMenu items
+	} else if (mMode == 0) {
 		switch (mVar) {
 			case 1:
 			lcd_gotoxy((16 - strlen(variables[mVar - 1])) / 2, 0);
 			lcd_puts(variables[mVar - 1]);
 			
+			// For 2 digit positive integer temperature
 			char tmp[3];
 			tmp[0] = '0' + max_temp / 10;
 			tmp[1] = '0' + max_temp % 10;
 			tmp[2] = '\0';
 			
 			if (!mSelect) {
-				lcd_gotoxy((16 - strlen(tmp)) / 2, 1);
+				lcd_gotoxy((13 - strlen(tmp)) / 2, 1);
 				lcd_puts(tmp);
+				lcd_puts(".0");
+				lcd_putc(223);        //degree symbol
+				lcd_putc('C');
 			} else {
-				lcd_gotoxy((15 - strlen(tmp)) / 2, 1);
+				lcd_gotoxy((11 - strlen(tmp)) / 2, 1);
 				lcd_putc('<');
 				lcd_puts(tmp);
+				lcd_puts(".0");
+				lcd_putc(223);        //degree symbol
+				lcd_putc('C');
 				lcd_putc('>');
 			}
 			break;
@@ -100,24 +157,62 @@ void showMenu() {
 			lcd_gotoxy((16 - strlen(variables[mVar - 1])) / 2, 0);
 			lcd_puts(variables[mVar - 1]);
 			
+			// For 2 digit positive integer temperature
 			//char tmp[3];
-			tmp[0] = '0' + min_temp / 10;
-			tmp[1] = '0' + min_temp % 10;
+			tmp[0] = '0' + max_temp / 10;
+			tmp[1] = '0' + max_temp % 10;
 			tmp[2] = '\0';
 			
 			if (!mSelect) {
-				lcd_gotoxy((16 - strlen(tmp)) / 2, 1);
+				lcd_gotoxy((13 - strlen(tmp)) / 2, 1);
 				lcd_puts(tmp);
+				lcd_puts(".0");
+				lcd_putc(223);        //degree symbol
+				lcd_putc('C');
 				} else {
-				lcd_gotoxy((15 - strlen(tmp)) / 2, 1);
+				lcd_gotoxy((11 - strlen(tmp)) / 2, 1);
 				lcd_putc('<');
 				lcd_puts(tmp);
+				lcd_puts(".0");
+				lcd_putc(223);        //degree symbol
+				lcd_putc('C');
 				lcd_putc('>');
 			}
 			break;
 		}
 		
+	// 'Modes' subMenu items
+	} else {
+		lcd_gotoxy(5, 0);
+		lcd_puts("Mode:");
+		switch (modeSelect) {
+			case 0:
+			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
+			lcd_putc('<');
+			lcd_puts(mode[mVar - 1]);
+			lcd_putc('>');
+			break;
+			case 1:
+			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
+			lcd_putc('<');
+			lcd_puts(mode[mVar - 1]);
+			lcd_putc('>');
+			break;
+			case 2:
+			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
+			lcd_putc('<');
+			lcd_puts(mode[mVar - 1]);
+			lcd_putc('>');
+			break;
+			case 3:
+			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
+			lcd_putc('<');
+			lcd_puts(mode[mVar - 1]);
+			lcd_putc('>');
+			break;
+		}
 	}
+	
 	lcd_gotoxy(15, 0);
 	lcd_putc('>');
 }
@@ -141,6 +236,17 @@ ISR(TIMER0_COMP_vect) {
 		tm = 0;
 		writeOnLCD();
 	}
+	
+	if(updateLCD == 1) {
+		uint32_t temperature;
+
+		temperature = curAvg << 8;
+		temperature >>= 9;
+		halfCelsius = temperature & 1;
+		temperature >>= 1;
+		temp = temperature;
+		updateLCD = 0;
+	}
 }
 
 void nonBlockingDebounce() {
@@ -163,6 +269,65 @@ ISR(INT0_vect) {
 	nonBlockingDebounce();
 }
 
+/*ISR(ADC_vect) {
+	temp = ((ADC * 5.0/1024) - 0.5) * 1000/10;
+}*/
+
+// Initialize moving average structure
+void init_temp_ma(movAvg_t *ma, int8_t totSamples)
+{
+	int i;
+	
+	ma->samIdx = 0;
+	ma->sum = 0;
+	for(i=0; i<totSamples; i++){
+		ma->samples[i] = 0;
+	}
+}
+
+// Calculate moving average
+uint16_t getMovAvg(uint16_t newSample, movAvg_t *ma)
+{
+	// Remove oldest sample from the sum
+	ma->sum -= ma->samples[ma->samIdx];
+	// Add the new sample to the sum and to samples array
+	ma->sum += newSample;
+	ma->samples[ma->samIdx] = newSample;
+	// Increment index and roll down to 0 if necessary
+	ma->samIdx++;
+	if( ma->samIdx == TOT_SAMPLES ){
+		ma->samIdx = 0;
+	}
+
+	// return moving average - divide the sum by 2^MOVAVG_SHIFT
+	return ma->sum >> MOVAVG_SHIFT;
+}
+
+
+// Read ADC value
+uint16_t readAdc(uint8_t channel)
+{
+	//choose channel
+	ADMUX &= ~(0x7);
+	ADMUX |= channel;
+	
+	//start conversion
+	ADCSRA |= _BV(ADSC);
+
+	//wait until conversion completes
+	while (ADCSRA & _BV(ADSC) );
+	
+	return ADCW;
+}
+
+void init_adc()
+{
+	//adc enable, prescaler=64 -> clk=115200
+	ADCSRA = _BV(ADEN)|_BV(ADPS2)|_BV(ADPS1);
+	//2.56V reference voltage
+	ADMUX = _BV(REFS0) | _BV(REFS1);
+}
+
 int main(void)
 {
 	// Setting menu items
@@ -181,8 +346,8 @@ int main(void)
 	mode[2] = "balance";
 	mode[3] = "test3";
 	
-	// First time temp variables are same as measured temp
-	max_temp = min_temp = temp;
+	// Initializing default temp
+	max_temp = min_temp = 35;
 
 	DDRA = _BV(5) | _BV(6) | _BV(7);
 	PORTB = _BV(0) | _BV(1) | _BV(2);
@@ -207,21 +372,44 @@ int main(void)
 	lcd_clrscr();
 
 	writeOnLCD();
+	
+	//ADMUX = _BV(REFS0);
+	//ADCSRA = _BV(ADEN) | _BV(ADIE) | _BV(ADPS2) | _BV(ADPS1);
+	
+	uint16_t tmp;
+	uint32_t lastDisplayedSum = 0;
+	movAvg_t movingAverage;
+	
+	// Initialize moving average structure
+	init_temp_ma(&movingAverage, TOT_SAMPLES);
+	
+	// Initialize ADC
+	init_adc();
+	
+	sei();	
 
 	while (1) {
+		tmp = readAdc(0);
+		curAvg = getMovAvg(tmp, &movingAverage);
+		
+		if(abs(lastDisplayedSum - movingAverage.sum) > SUM_DIFF_THOLD ) {
+			lastDisplayedSum = movingAverage.sum;
+			updateLCD = 1;
+		}
 		
 		// Using keys (PORTB) to control
 		if (bit_is_clear(PINB, 0)) {
 			switch (fMode) {
 				case 1:
-				
+				 // key1 function on temp display screen
 				break;
 				case 2:
 					if (!subMenu) {
 						mMode = (mMode + 1) % 4;
 					} else if (!mSelect) {
-						mVar = 1 + (mVar % 2);
-					} else {
+						mVar = 1 + (mVar % (mMode == 0 ? 2 : 4));
+						if (mMode == 1) modeSelect = mVar - 1;
+					} else if (mMode == 0) {
 						switch (mVar) {
 							case 1:
 								max_temp += 1;
@@ -235,21 +423,18 @@ int main(void)
 					}
 				
 				break;
-				case 3:
-				
-				break;
 			}
 		} else if (bit_is_clear(PINB, 1)) {
 			switch (fMode) {
 				case 1:
-				
+					// // key2 function on temp display screen
 				break;
 				case 2:
 					if (!subMenu) {
 						subMenu = 1;
 					} else if (!mSelect) {
 						mSelect = mVar;
-					} else {
+					} else if (mMode == 0) {
 						switch (mVar) {
 							case 1:
 								if (max_temp <= 0) max_temp = 100;
@@ -260,11 +445,7 @@ int main(void)
 								min_temp -= 1;
 							break;
 						}
-					}
-				
-				break;
-				case 3:
-				
+					}			
 				break;
 			}
 		} else if (bit_is_clear(PINB, 2)) {
