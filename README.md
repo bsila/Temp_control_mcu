@@ -18,7 +18,12 @@ The idea is to write a program for atmega16 that will be able to control heating
 	Menu state is used for configuring modes
 	- variables
 	- modes
+	
+##### 3 - set password
+	After start password for accessing menu must be set
 
+##### 4 - check password
+	Passord is needed to get access to menu
 ---	
 
 ### Modes

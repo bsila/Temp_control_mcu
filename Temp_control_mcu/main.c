@@ -18,8 +18,13 @@
 /*
 ** Global variables
 */
-static uint8_t tm = 0;
+//static uint8_t tm = 0;
 static uint8_t temp = 0;
+static uint8_t pswSet = 0;
+static uint8_t mAccess = 0;
+static uint8_t pswError = 0;
+static char password[4];
+static char tmpPassword[4];
 
 // Names
 const char *mode[4];
@@ -33,7 +38,7 @@ static uint8_t min_temp = 0;
 // Modes/menu
 static uint8_t fMode = 0;		// function/display mode
 static uint8_t mMode = 0;		// menu mode
-static uint8_t mVar = 1;		// menu variables
+static uint8_t mVar = 0;		// menu variables
 static uint8_t mSelect = 0;		// menu select flag
 static uint8_t modeSelect = 0;	// working mode
 static uint8_t subMenu = 0;		// submenu flag
@@ -68,7 +73,11 @@ void init_tcnt1_1hz();
 void init_pwm();
 void set_pwm_dc(uint8_t);
 
+/*
+** Display functions
+*/
 
+// Main display
 void showTemperature() {
 	/*char tmp[3];
 	tmp[0] = ' ' + temp / 10;
@@ -101,6 +110,7 @@ void showMsg() {
 
 // TODO: check if switch is necessary
 void showMenu() {
+	lcd_clrscr();
 	lcd_putc('<');
 	
 	// Menu items
@@ -217,25 +227,110 @@ void showMenu() {
 	lcd_putc('>');
 }
 
+void resetPsw(char *tmpPsw){
+	for (uint8_t i = 0; i < 4; i++){
+		tmpPsw[i] = '0';
+	}
+}
+
+void setPsw() {
+	if (!pswSet) {
+		lcd_clrscr();
+		lcd_gotoxy(1, 0);
+		lcd_puts("Set password:");
+		lcd_gotoxy(4, 1);
+		
+		for (uint8_t i = 0; i < 4; i++){
+			if (mVar == i) {
+				lcd_putc(mSelect ? '<' : ' ');
+				lcd_putc(password[i]);
+				lcd_putc(mSelect ? '>' : ' ');
+			} else lcd_putc(password[i]);
+		}
+	} else {
+		lcd_clrscr();
+		lcd_gotoxy(2, 0);
+		lcd_puts("Password set");
+		lcd_gotoxy(4, 1);
+		lcd_puts("=>");
+		for (uint8_t i = 0; i < 4; i++){
+			lcd_putc(password[i]);
+		}
+		lcd_puts("<=");
+	}
+}
+
+void enterPsw() {
+	if (!pswError) {
+		lcd_clrscr();
+		lcd_puts("Enter password:");
+		lcd_gotoxy(4, 1);
+		
+		for (uint8_t i = 0; i < 4; i++){
+			if (mVar == i) {
+				lcd_putc(mSelect ? '<' : ' ');
+				lcd_putc(tmpPassword[i]);
+				lcd_putc(mSelect ? '>' : ' ');
+			} else lcd_putc(tmpPassword[i]);
+		}
+	} else {
+		lcd_clrscr();
+		lcd_gotoxy(3, 0);
+		lcd_puts("Incorrect");
+		lcd_gotoxy(4, 1);
+		lcd_puts("password");
+	}
+}
+
+uint8_t checkPsw(const char *toCheck) {
+	for (uint8_t i = 0; i < 4; i++) {
+		if (toCheck[i] != password[i]) return 0;
+	}
+	return 1;
+}
+
 void writeOnLCD() {
 	lcd_clrscr();
+	
+	switch (fMode){
+		case 0:
+			showMsg();
+		break;
+		case 1:
+			showTemperature();
+		break;
+		case 2:
+			showMenu();
+		break;
+		case 3:
+			setPsw();
+		break;
+		case 4:
+			enterPsw();
+		break;
+	}
 
-	if (!fMode) {
+	/*if (!fMode) {
 		showMsg();
 	} else if (fMode == 1) {
 		showTemperature();
 	} else {
 		showMenu();	
-	}
+	}*/
 }
 
+/*
+** ISR functions
+*/
+
 ISR(TIMER0_COMP_vect) {
-	tm++;
+	/*tm++;
 
 	if (tm == 100) {
 		tm = 0;
 		writeOnLCD();
-	}
+	}*/
+	writeOnLCD();
 	
 	if(updateLCD == 1) {
 		uint32_t temperature;
@@ -261,8 +356,37 @@ void nonBlockingDebounce() {
 }
 
 ISR(INT0_vect) {
-	//fMode 0 is only at the start
-	fMode = 1 + (fMode % 2);
+	
+	switch (fMode) {
+		// fMode 0 is only at the start
+		// Set up password
+		case 0:
+			fMode = 3;
+		break;
+		
+		// Switch between main and menu display
+		case 1:
+			fMode = !mAccess ? 4 : 2;
+			mVar = 0;
+			mSelect = 0;
+		break;
+		case 2:
+			fMode = 1;
+			mAccess = 0;
+		break;
+		
+		// TODO: add warning msg if psw not set
+		// After password go to main display
+		case 3:
+			if (pswSet) fMode = 1;
+		break;
+		
+		// Exit error screen
+		case 4:
+			pswError = 0;
+			fMode = 1;
+		break;	
+	}
 
 	writeOnLCD();
 
@@ -272,6 +396,10 @@ ISR(INT0_vect) {
 /*ISR(ADC_vect) {
 	temp = ((ADC * 5.0/1024) - 0.5) * 1000/10;
 }*/
+
+/*
+** ADC and moving average functions
+*/
 
 // Initialize moving average structure
 void init_temp_ma(movAvg_t *ma, int8_t totSamples)
@@ -345,6 +473,10 @@ int main(void)
 	mode[1] = "cooling";
 	mode[2] = "balance";
 	mode[3] = "test3";
+	
+	// Initialize password to '0000'
+	resetPsw(tmpPassword);
+	resetPsw(password);
 	
 	// Initializing default temp
 	max_temp = min_temp = 35;
@@ -421,7 +553,20 @@ int main(void)
 							break;
 						}	
 					}
-				
+				break;
+				case 3:
+					if (!mSelect) {
+						mVar = (mVar + 1) % 4;
+					} else {
+						password[mVar] += 1;
+					}
+				break;
+				case 4:
+				if (!mSelect) {
+					mVar = (mVar + 1) % 4;
+					} else {
+					tmpPassword[mVar] += 1;
+				}
 				break;
 			}
 		} else if (bit_is_clear(PINB, 1)) {
@@ -447,14 +592,52 @@ int main(void)
 						}
 					}			
 				break;
+				case 3:
+				if (!mSelect) {
+					mSelect = 1;
+				} else {
+					password[mVar] -= 1;
+				}
+				break;
+				case 4:
+				if (!mSelect) {
+					mSelect = 1;
+					} else {
+					tmpPassword[mVar] -= 1;
+				}
+				break;
 			}
 		} else if (bit_is_clear(PINB, 2)) {
 			switch (fMode) {
 				case 2:
 					if (mSelect){
 						mSelect = 0;
+						mVar = 0;
 					} else if (subMenu){
 						subMenu = 0;
+					}
+				break;
+				case 3:
+					if (!mSelect) {
+						pswSet = 1;
+						mVar = 0;
+					} else {
+						mSelect = 0;
+					}
+				break;
+				case 4:
+					if (mSelect) {
+						mSelect = 0;
+					} else if (checkPsw(tmpPassword)) {
+						mAccess = 1;
+						fMode = 2;
+						mVar = 1;
+						resetPsw(tmpPassword);
+					} else {
+						pswError = 1;
+						mAccess = 0;
+						mVar = 0;
+						resetPsw(tmpPassword);
 					}
 				break;
 			}
