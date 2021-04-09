@@ -3,7 +3,7 @@
  *
  * Created: 23.3.2021. 22:44:18
  * Author : Luka Županoviæ, Vedran Matiæ, Borna Sila
- * Version: 0.1
+ * Version: 0.3
  */ 
 #define F_CPU 7372800UL
 
@@ -29,11 +29,18 @@ static char tmpPassword[4];
 // Names
 const char *mode[4];
 const char *menu[4];
-const char *variables[2];
+const char *variables[6];
+const char *alarms[5];
 
 // Variables
-static uint8_t max_temp = 0;
+static uint8_t var_mat[6];
+static uint8_t alarms_mat[5];
+/*static uint8_t max_temp = 0;
 static uint8_t min_temp = 0;
+static uint8_t set = 0;
+static uint8_t dif = 0;
+static uint8_t Ont = 0;
+static uint8_t Offt = 1;*/
 
 // Modes/menu
 static uint8_t fMode = 0;		// function/display mode
@@ -108,118 +115,88 @@ void showMsg() {
 	lcd_puts_P("temp. control");
 }
 
-// TODO: check if switch is necessary
 void showMenu() {
 	lcd_clrscr();
 	lcd_putc('<');
 	
 	// Menu items
 	if (!subMenu){
-		switch (mMode) {
-			case 0:
-			lcd_gotoxy((16 - strlen(menu[mMode])) / 2, 0);
-			lcd_puts(menu[mMode]);
-			break;
-			case 1:
-			lcd_gotoxy((16 - strlen(menu[mMode])) / 2, 0);
-			lcd_puts(menu[mMode]);
-			break;
-			case 2:
-			lcd_gotoxy((16 - strlen(menu[mMode])) / 2, 0);
-			lcd_puts(menu[mMode]);
-			break;
-			case 3:
-			lcd_gotoxy((16 - strlen(menu[mMode])) / 2, 0);
-			lcd_puts(menu[mMode]);
-			break;
-		}
+		lcd_gotoxy((16 - strlen(menu[mMode])) / 2, 0);
+		lcd_puts(menu[mMode]);
 		
 	// 'Variables' subMenu items
 	} else if (mMode == 0) {
-		switch (mVar) {
-			case 1:
-			lcd_gotoxy((16 - strlen(variables[mVar - 1])) / 2, 0);
-			lcd_puts(variables[mVar - 1]);
-			
-			// For 2 digit positive integer temperature
-			char tmp[3];
-			tmp[0] = '0' + max_temp / 10;
-			tmp[1] = '0' + max_temp % 10;
-			tmp[2] = '\0';
-			
-			if (!mSelect) {
-				lcd_gotoxy((13 - strlen(tmp)) / 2, 1);
-				lcd_puts(tmp);
-				lcd_puts(".0");
-				lcd_putc(223);        //degree symbol
+		lcd_gotoxy((16 - strlen(variables[mVar])) / 2, 0);
+		lcd_puts(variables[mVar]);
+		char buffer[4];
+		
+		if (!mSelect) {
+			lcd_gotoxy(6, 1);
+			if (mVar == 0 || mVar == 1 || mVar == 2) {
+				lcd_puts(itoa(var_mat[mVar], buffer, 10));
+				lcd_putc(223);
 				lcd_putc('C');
 			} else {
-				lcd_gotoxy((11 - strlen(tmp)) / 2, 1);
-				lcd_putc('<');
-				lcd_puts(tmp);
-				lcd_puts(".0");
-				lcd_putc(223);        //degree symbol
-				lcd_putc('C');
-				lcd_putc('>');
+				lcd_putc(' ');
+				lcd_puts(itoa(var_mat[mVar], buffer, 10));
+				lcd_putc(' ');
 			}
-			break;
-			case 2:
-			lcd_gotoxy((16 - strlen(variables[mVar - 1])) / 2, 0);
-			lcd_puts(variables[mVar - 1]);
-			
-			// For 2 digit positive integer temperature
-			//char tmp[3];
-			tmp[0] = '0' + max_temp / 10;
-			tmp[1] = '0' + max_temp % 10;
-			tmp[2] = '\0';
-			
-			if (!mSelect) {
-				lcd_gotoxy((13 - strlen(tmp)) / 2, 1);
-				lcd_puts(tmp);
-				lcd_puts(".0");
-				lcd_putc(223);        //degree symbol
+		} else {
+			lcd_gotoxy(5, 1);
+			lcd_putc('<');
+			if (mVar == 0 || mVar == 1 || mVar == 2) {
+				lcd_puts(itoa(var_mat[mVar], buffer, 10));
+				lcd_putc(223);
 				lcd_putc('C');
-				} else {
-				lcd_gotoxy((11 - strlen(tmp)) / 2, 1);
-				lcd_putc('<');
-				lcd_puts(tmp);
-				lcd_puts(".0");
-				lcd_putc(223);        //degree symbol
-				lcd_putc('C');
-				lcd_putc('>');
+			} else {
+				lcd_putc(' ');
+				lcd_puts(itoa(var_mat[mVar], buffer, 10));
+				lcd_putc(' ');
 			}
-			break;
+			lcd_putc('>');
 		}
 		
 	// 'Modes' subMenu items
-	} else {
+	} else if (mMode == 1) {
 		lcd_gotoxy(5, 0);
 		lcd_puts("Mode:");
-		switch (modeSelect) {
-			case 0:
-			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
+		lcd_gotoxy((14 - strlen(mode[mVar])) / 2, 1);
+		lcd_putc('<');
+		lcd_puts(mode[mVar]);
+		lcd_putc('>');
+		
+	// 'Alarms' subMenu items
+	} else {
+		lcd_gotoxy((16 - strlen(alarms[mVar])) / 2, 0);
+		lcd_puts(alarms[mVar]);
+		char buffer[4];
+		
+		if (!mSelect) {
+			lcd_gotoxy(6, 1);
+			if (mVar == 1 || mVar == 2) {
+				lcd_puts(itoa(alarms_mat[mVar], buffer, 10));
+				lcd_putc(223);
+				lcd_putc('C');
+			} else {
+				lcd_putc(' ');
+				lcd_puts(itoa(alarms_mat[mVar], buffer, 10));
+				lcd_putc(' ');
+				if (mVar == 3) lcd_putc(' ');
+			}
+		} else {
+			lcd_gotoxy(5, 1);
 			lcd_putc('<');
-			lcd_puts(mode[mVar - 1]);
+			if (mVar == 1 || mVar == 2) {
+				lcd_puts(itoa(alarms_mat[mVar], buffer, 10));
+				lcd_putc(223);
+				lcd_putc('C');
+			} else {
+				lcd_putc(' ');
+				lcd_puts(itoa(alarms_mat[mVar], buffer, 10));
+				lcd_putc(' ');
+				if (mVar == 3) lcd_putc(' ');
+			}
 			lcd_putc('>');
-			break;
-			case 1:
-			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
-			lcd_putc('<');
-			lcd_puts(mode[mVar - 1]);
-			lcd_putc('>');
-			break;
-			case 2:
-			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
-			lcd_putc('<');
-			lcd_puts(mode[mVar - 1]);
-			lcd_putc('>');
-			break;
-			case 3:
-			lcd_gotoxy((14 - strlen(mode[mVar - 1])) / 2, 1);
-			lcd_putc('<');
-			lcd_puts(mode[mVar - 1]);
-			lcd_putc('>');
-			break;
 		}
 	}
 	
@@ -373,6 +350,7 @@ ISR(INT0_vect) {
 		case 2:
 			fMode = 1;
 			mAccess = 0;
+			mMode = 0;
 		break;
 		
 		// TODO: add warning msg if psw not set
@@ -461,27 +439,49 @@ int main(void)
 	// Setting menu items
 	menu[0] = "Variables";
 	menu[1] = "Modes";
-	menu[2] = "Test_menu";
-	menu[3] = "Test_menu.";
+	menu[2] = "Alarm";
 	
 	// Setting variables names
-	variables[0] = "max_temp";
-	variables[1] = "min_temp";
+	variables[0] = "max temp";
+	variables[1] = "min temp";
+	variables[2] = "set temp";
+	variables[3] = "temp diff";
+	variables[4] = "on time";
+	variables[5] = "off time";
+	
+	// Setting alarm names
+	alarms[0] = "alarm diff";
+	alarms[1] = "alarm high";
+	alarms[2] = "alarm low";
+	alarms[3] = "alarm usage";
+	alarms[4] = "lock usage";
 	
 	// Setting modes
-	mode[0] = "heating";
-	mode[1] = "cooling";
-	mode[2] = "balance";
-	mode[3] = "test3";
+	mode[0] = "heat";
+	mode[1] = "cool";
+	mode[2] = "bal";
 	
 	// Initialize password to '0000'
 	resetPsw(tmpPassword);
 	resetPsw(password);
 	
-	// Initializing default temp
-	max_temp = min_temp = 35;
+	// Initializing default variables
+	var_mat[0] = 99;
+	var_mat[1] = 0;
+	var_mat[2] = 0;
+	var_mat[3] = 2;
+	var_mat[4] = 0;
+	var_mat[5] = 1;
+	
+	// Initializing default alarm
+	alarms_mat[0] = 2;
+	alarms_mat[1] = 50;
+	alarms_mat[2] = 0;
+	alarms_mat[3] = 0;
+	alarms_mat[4] = 0;
 
-	DDRA = _BV(5) | _BV(6) | _BV(7);
+	DDRA = _BV(1) | _BV(2);
+	PORTA = 0x00;
 	PORTB = _BV(0) | _BV(1) | _BV(2);
 	DDRB = 0;
 
@@ -527,6 +527,31 @@ int main(void)
 		if(abs(lastDisplayedSum - movingAverage.sum) > SUM_DIFF_THOLD ) {
 			lastDisplayedSum = movingAverage.sum;
 			updateLCD = 1;
+								
+			uint16_t diff = abs(var_mat[2] - temp);
+			if (diff > var_mat[3]){ 
+				switch (modeSelect) {
+					case 0:
+						if (temp > var_mat[2]) {
+							PORTA &= _BV(0);
+							break;
+						}
+						PORTA |=  _BV(1);
+					break;
+					case 1:
+						if (temp < var_mat[2]) {
+							PORTA &= _BV(0);
+							break;
+						}
+						PORTA |=  _BV(2);
+					break;
+					case 2:
+						if (temp < var_mat[2]) {
+							PORTA |=  _BV(1);
+						} else PORTA |=  _BV(2);
+					break;
+				}
+			} else PORTA &= _BV(0);
 		}
 		
 		// Using keys (PORTB) to control
@@ -535,23 +560,60 @@ int main(void)
 				case 1:
 				 // key1 function on temp display screen
 				break;
-				case 2:
-					if (!subMenu) {
-						mMode = (mMode + 1) % 4;
+				case 2:											
+					if (!subMenu) {								
+						// switch between sub menus
+						mMode = (mMode + 1) % 3;
 					} else if (!mSelect) {
-						mVar = 1 + (mVar % (mMode == 0 ? 2 : 4));
-						if (mMode == 1) modeSelect = mVar - 1;
-					} else if (mMode == 0) {
+						// change sub menu items 0 = var, 1 = mode, 2 = alarm
+						mVar = (mVar + 1) % (mMode == 0 ? 6 :  mMode == 1 ? 3 : 5);
+						// mode changes directly
+						if (mMode == 1) modeSelect = mVar;
+						
+					// variable setup
+					} else if (mMode == 0) {				
+						var_mat[mVar] += 1;						
 						switch (mVar) {
+							case 0:
+								if (var_mat[mVar] > 99) var_mat[mVar] = 0;
+							break;
 							case 1:
-								max_temp += 1;
-								if (max_temp > 99) max_temp = 0;
+								if (var_mat[mVar] > 99) var_mat[mVar] = 0;
 							break;
 							case 2:
-								min_temp += 1;
-								if (min_temp > 99) min_temp = 0;
+								if (var_mat[mVar] > 99) var_mat[mVar] = 0;
 							break;
-						}	
+							case 3:
+								if (var_mat[mVar] > 30) var_mat[mVar] = 0;
+							break;
+							case 4:
+								if (var_mat[mVar] > 250) var_mat[mVar] = 0;
+							break;
+							case 5:
+								if (var_mat[mVar] > 250) var_mat[mVar] = 0;
+							break;
+						}
+					
+					// alarm setup
+					} else if (mMode == 2) {
+						alarms_mat[mVar] += 1;
+						switch (mVar) {
+							case 0:
+								if (alarms_mat[mVar] > 50) alarms_mat[mVar] = 1;
+							break;
+							case 1:
+								if (alarms_mat[mVar] > 99) alarms_mat[mVar] = 0;
+							break;
+							case 2:
+								if (alarms_mat[mVar] > 99) alarms_mat[mVar] = 0;
+							break;
+							case 3:
+								alarms_mat[mVar] = alarms_mat[mVar] % 2;
+							break;
+							case 4:
+								alarms_mat[mVar] = alarms_mat[mVar] % 2;
+							break;
+						}					
 					}
 				break;
 				case 3:
@@ -577,42 +639,76 @@ int main(void)
 				case 2:
 					if (!subMenu) {
 						subMenu = 1;
+						mVar = mMode == 1 ? modeSelect : 0;
 					} else if (!mSelect) {
-						mSelect = mVar;
+						mSelect = 1;
+						
+					// variable setup
 					} else if (mMode == 0) {
 						switch (mVar) {
+							case 0:
+								if (var_mat[mVar] <= 0) var_mat[mVar] = 100;
+							break;
 							case 1:
-								if (max_temp <= 0) max_temp = 100;
-								max_temp -= 1;
+								if (var_mat[mVar] <= 0) var_mat[mVar] = 100;
 							break;
 							case 2:
-								if (min_temp <= 0) min_temp = 100;
-								min_temp -= 1;
+								if (var_mat[mVar] <= 0) var_mat[mVar] = 100;
+							break;
+							case 3:
+								if (var_mat[mVar] <= 0) var_mat[mVar] = 31;
+							break;
+							case 4:
+								if (var_mat[mVar] <= 0) var_mat[mVar] = 251;
+							break;
+							case 5:
+								if (var_mat[mVar] <= 0) var_mat[mVar] = 251;
 							break;
 						}
+						var_mat[mVar] -= 1;
+						
+					// alarm setup
+					} else if (mMode == 2) {
+						switch (mVar) {
+							case 0:
+								if (alarms_mat[mVar] <= 1) alarms_mat[mVar] = 51;
+							break;
+							case 1:
+								if (alarms_mat[mVar] <= 0) alarms_mat[mVar] = 100;
+							break;
+							case 2:
+								if (alarms_mat[mVar] <= 0) alarms_mat[mVar] = 100;
+							break;
+							case 3:
+								alarms_mat[mVar] = alarms_mat[mVar] % 2 + 1;
+							break;
+							case 4:
+								alarms_mat[mVar] = alarms_mat[mVar] % 2 + 1;
+							break;
+						}
+						alarms_mat[mVar] -= 1;
 					}			
 				break;
 				case 3:
-				if (!mSelect) {
-					mSelect = 1;
-				} else {
-					password[mVar] -= 1;
-				}
+					if (!mSelect) {
+						mSelect = 1;
+					} else {
+						password[mVar] -= 1;
+					}
 				break;
 				case 4:
-				if (!mSelect) {
-					mSelect = 1;
-					} else {
-					tmpPassword[mVar] -= 1;
-				}
+					if (!mSelect) {
+						mSelect = 1;
+						} else {
+						tmpPassword[mVar] -= 1;
+					}
 				break;
 			}
 		} else if (bit_is_clear(PINB, 2)) {
 			switch (fMode) {
-				case 2:
-					if (mSelect){
+				case 2:								
+					if (mSelect){						
 						mSelect = 0;
-						mVar = 0;
 					} else if (subMenu){
 						subMenu = 0;
 					}

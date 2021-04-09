@@ -23,7 +23,7 @@ The idea is to write a program for atmega16 that will be able to control heating
 	After start password for accessing menu must be set
 
 ##### 4 - check password
-	Passord is needed to get access to menu
+	Password is needed to get access to menu
 ---	
 
 ### Modes
@@ -39,6 +39,12 @@ The idea is to write a program for atmega16 that will be able to control heating
 - key1 - next/increase value (in menu)
 - key2 - down/select submenu/decrease value (in menu)
 - key3 - confirm change/up (in menu)
+
+---
+
+### Variables
+
+
 
 
 
