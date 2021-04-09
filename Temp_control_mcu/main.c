@@ -21,6 +21,7 @@
 //static uint8_t tm = 0;
 static uint8_t temp = 0;
 static uint8_t pswSet = 0;
+static uint8_t pswUse = 0;
 static uint8_t mAccess = 0;
 static uint8_t pswError = 0;
 static char password[4];
@@ -104,6 +105,10 @@ void showTemperature() {
 	lcd_gotoxy(0, 1);
 	lcd_puts("Mode: ");
 	lcd_puts(mode[modeSelect]);
+	lcd_gotoxy(11, 1);
+	if (alarms_mat[4]) lcd_putc('L');
+	lcd_gotoxy(13, 1);
+	if (alarms_mat[3]) lcd_putc('A');
 }
 
 // Starting message
@@ -224,7 +229,7 @@ void setPsw() {
 				lcd_putc(mSelect ? '>' : ' ');
 			} else lcd_putc(password[i]);
 		}
-	} else {
+	} else if (pswUse) {
 		lcd_clrscr();
 		lcd_gotoxy(2, 0);
 		lcd_puts("Password set");
@@ -234,6 +239,12 @@ void setPsw() {
 			lcd_putc(password[i]);
 		}
 		lcd_puts("<=");
+	} else {
+		lcd_clrscr();
+		lcd_gotoxy(2, 0);
+		lcd_puts("Password not");
+		lcd_gotoxy(6, 1);
+		lcd_puts("used");
 	}
 }
 
@@ -344,16 +355,15 @@ ISR(INT0_vect) {
 		// Switch between main and menu display
 		case 1:
 			fMode = !mAccess ? 4 : 2;
-			mVar = 0;
-			mSelect = 0;
 		break;
 		case 2:
 			fMode = 1;
-			mAccess = 0;
+			mAccess = !pswUse;
 			mMode = 0;
+			mSelect = 0;
+			subMenu = 0;
 		break;
 		
-		// TODO: add warning msg if psw not set
 		// After password go to main display
 		case 3:
 			if (pswSet) fMode = 1;
@@ -459,7 +469,7 @@ int main(void)
 	// Setting modes
 	mode[0] = "heat";
 	mode[1] = "cool";
-	mode[2] = "bal";
+	mode[2] = "bal ";
 	
 	// Initialize password to '0000'
 	resetPsw(tmpPassword);
@@ -575,13 +585,15 @@ int main(void)
 						var_mat[mVar] += 1;						
 						switch (mVar) {
 							case 0:
-								if (var_mat[mVar] > 99) var_mat[mVar] = 0;
+								if (var_mat[mVar] > 99) var_mat[mVar] = var_mat[1] + 1;
+								if (var_mat[2] > var_mat[mVar]) var_mat[2] = var_mat[mVar];
 							break;
 							case 1:
-								if (var_mat[mVar] > 99) var_mat[mVar] = 0;
+								if (var_mat[mVar] >= var_mat[0]) var_mat[mVar] = 0;
+								if (var_mat[2] < var_mat[mVar]) var_mat[2] = var_mat[mVar];
 							break;
 							case 2:
-								if (var_mat[mVar] > 99) var_mat[mVar] = 0;
+								if (var_mat[mVar] > var_mat[0]) var_mat[mVar] = var_mat[1];
 							break;
 							case 3:
 								if (var_mat[mVar] > 30) var_mat[mVar] = 0;
@@ -602,10 +614,10 @@ int main(void)
 								if (alarms_mat[mVar] > 50) alarms_mat[mVar] = 1;
 							break;
 							case 1:
-								if (alarms_mat[mVar] > 99) alarms_mat[mVar] = 0;
+								if (alarms_mat[mVar] > 99) alarms_mat[mVar] = alarms_mat[2] + 1;
 							break;
 							case 2:
-								if (alarms_mat[mVar] > 99) alarms_mat[mVar] = 0;
+								if (alarms_mat[mVar] >= alarms_mat[1]) alarms_mat[mVar] = 0;
 							break;
 							case 3:
 								alarms_mat[mVar] = alarms_mat[mVar] % 2;
@@ -647,13 +659,15 @@ int main(void)
 					} else if (mMode == 0) {
 						switch (mVar) {
 							case 0:
-								if (var_mat[mVar] <= 0) var_mat[mVar] = 100;
+								if (var_mat[mVar] <= var_mat[1]) var_mat[mVar] = 100;
+								if (var_mat[2] > var_mat[mVar]) var_mat[2] = var_mat[mVar] - 1;
 							break;
 							case 1:
-								if (var_mat[mVar] <= 0) var_mat[mVar] = 100;
+								if (var_mat[mVar] <= 0) var_mat[mVar] = var_mat[0];
+								if (var_mat[2] > var_mat[mVar]) var_mat[2] = var_mat[mVar] - 1;
 							break;
 							case 2:
-								if (var_mat[mVar] <= 0) var_mat[mVar] = 100;
+								if (var_mat[mVar] <= var_mat[1]) var_mat[mVar] = var_mat[0] + 1;
 							break;
 							case 3:
 								if (var_mat[mVar] <= 0) var_mat[mVar] = 31;
@@ -716,6 +730,8 @@ int main(void)
 				case 3:
 					if (!mSelect) {
 						pswSet = 1;
+						pswUse = !checkPsw("0000");
+						mAccess = !pswUse;
 						mVar = 0;
 					} else {
 						mSelect = 0;
