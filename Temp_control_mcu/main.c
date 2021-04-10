@@ -3,7 +3,7 @@
  *
  * Created: 23.3.2021. 22:44:18
  * Author : Luka Županoviæ, Vedran Matiæ, Borna Sila
- * Version: 0.3
+ * Version: 0.4
  */ 
 #define F_CPU 7372800UL
 
@@ -18,7 +18,6 @@
 /*
 ** Global variables
 */
-//static uint8_t tm = 0;
 static uint8_t temp = 0;
 static uint8_t pswSet = 0;
 static uint8_t pswUse = 0;
@@ -36,12 +35,6 @@ const char *alarms[5];
 // Variables
 static uint8_t var_mat[6];
 static uint8_t alarms_mat[5];
-/*static uint8_t max_temp = 0;
-static uint8_t min_temp = 0;
-static uint8_t set = 0;
-static uint8_t dif = 0;
-static uint8_t Ont = 0;
-static uint8_t Offt = 1;*/
 
 // Modes/menu
 static uint8_t fMode = 0;		// function/display mode
@@ -87,10 +80,6 @@ void set_pwm_dc(uint8_t);
 
 // Main display
 void showTemperature() {
-	/*char tmp[3];
-	tmp[0] = ' ' + temp / 10;
-	tmp[1] = '0' + temp % 10;
-	tmp[2] = '\0';*/
 	lcd_clrscr();
 
 	char adcStr[16];
@@ -106,18 +95,18 @@ void showTemperature() {
 	lcd_puts("Mode: ");
 	lcd_puts(mode[modeSelect]);
 	lcd_gotoxy(11, 1);
-	if (alarms_mat[4]) lcd_putc('L');
+	if (alarms_mat[4]) lcd_putc(0); // lock icon
 	lcd_gotoxy(13, 1);
-	if (alarms_mat[3]) lcd_putc('A');
+	if (alarms_mat[3]) lcd_putc(1); // bell icon
 }
 
 // Starting message
 void showMsg() {
 	lcd_clrscr();
 	lcd_gotoxy(3, 0);
-	lcd_puts_P("Welcome to");
+	lcd_puts("Welcome to");
 	lcd_gotoxy(1, 1);
-	lcd_puts_P("temp. control");
+	lcd_puts("temp. control");
 }
 
 void showMenu() {
@@ -297,14 +286,6 @@ void writeOnLCD() {
 			enterPsw();
 		break;
 	}
-
-	/*if (!fMode) {
-		showMsg();
-	} else if (fMode == 1) {
-		showTemperature();
-	} else {
-		showMenu();	
-	}*/
 }
 
 /*
@@ -381,10 +362,6 @@ ISR(INT0_vect) {
 	nonBlockingDebounce();
 }
 
-/*ISR(ADC_vect) {
-	temp = ((ADC * 5.0/1024) - 0.5) * 1000/10;
-}*/
-
 /*
 ** ADC and moving average functions
 */
@@ -444,6 +421,34 @@ void init_adc()
 	ADMUX = _BV(REFS0) | _BV(REFS1);
 }
 
+void init_spec_char(){
+	lcd_command(0x40);	// set CGRAM address for first character
+	
+	// lock icon
+	lcd_data(0x0e); 
+	lcd_data(0x11); 
+	lcd_data(0x11);
+	lcd_data(0x1f);
+	lcd_data(0x1b);
+	lcd_data(0x1f);
+	lcd_data(0x1f);
+	lcd_data(0x00); 
+	lcd_putc(0);
+	
+	lcd_command(0x48);	// set CGRAM address for second character
+	
+	// bell icon
+	lcd_data(0x00); 
+	lcd_data(0x04); 
+	lcd_data(0x0e);
+	lcd_data(0x0e);
+	lcd_data(0x0e);
+	lcd_data(0x1f);
+	lcd_data(0x04);
+	lcd_data(0x00);
+	lcd_putc(1);
+}
+
 int main(void)
 {
 	// Setting menu items
@@ -490,8 +495,10 @@ int main(void)
 	alarms_mat[3] = 0;
 	alarms_mat[4] = 0;
 
-	DDRA = _BV(1) | _BV(2);
+	DDRA = _BV(1) | _BV(2) | _BV(7);
 	PORTA = 0x00;
+		PORTA |= _BV(7);
+
 	PORTB = _BV(0) | _BV(1) | _BV(2);
 	DDRB = 0;
 
@@ -511,12 +518,10 @@ int main(void)
 	sei();
 
 	lcd_init(LCD_DISP_ON);
+	init_spec_char();
 	lcd_clrscr();
 
 	writeOnLCD();
-	
-	//ADMUX = _BV(REFS0);
-	//ADCSRA = _BV(ADEN) | _BV(ADIE) | _BV(ADPS2) | _BV(ADPS1);
 	
 	uint16_t tmp;
 	uint32_t lastDisplayedSum = 0;
