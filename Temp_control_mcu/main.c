@@ -3,7 +3,7 @@
  *
  * Created: 23.3.2021. 22:44:18
  * Author : Luka Županoviæ, Vedran Matiæ, Borna Sila
- * Version: 0.9
+ * Version: 1.0
  */ 
 #define F_CPU 7372800UL
 
@@ -31,11 +31,11 @@ static char tmpPassword[4];
 // Names
 const char *mode[4];
 const char *menu[4];
-const char *variables[6];
+const char *variables[4];
 const char *alarms[5];
 
 // Variables and alarms
-static uint8_t var_mat[6];
+static uint8_t var_mat[4];
 static uint8_t alarms_mat[5];
 
 // Modes/menu
@@ -97,8 +97,6 @@ int main(void)
 	variables[1] = "min temp";
 	variables[2] = "set temp";
 	variables[3] = "temp diff";
-	variables[4] = "on time";
-	variables[5] = "off time";
 	
 	// Setting alarm names
 	alarms[0] = "alarm diff";
@@ -121,8 +119,6 @@ int main(void)
 	var_mat[1] = 0;
 	var_mat[2] = 0;
 	var_mat[3] = 2;
-	var_mat[4] = 0;
-	var_mat[5] = 1;
 	
 	// Initializing default alarm
 	alarms_mat[0] = 2;
@@ -240,7 +236,7 @@ int main(void)
 					mMode = (mMode + 1) % 3;
 					} else if (!mSelect) {
 					// change sub menu items 0 = var, 1 = mode, 2 = alarm
-					mVar = (mVar + 1) % (mMode == 0 ? 6 :  mMode == 1 ? 3 : 5);
+					mVar = (mVar + 1) % (mMode == 0 ? 4 :  mMode == 1 ? 3 : 5);
 					// mode changes directly
 					if (mMode == 1) modeSelect = mVar;
 					
@@ -261,12 +257,6 @@ int main(void)
 						break;
 						case 3:
 						if (var_mat[mVar] > 30) var_mat[mVar] = 0;
-						break;
-						case 4:
-						if (var_mat[mVar] > 250) var_mat[mVar] = 0;
-						break;
-						case 5:
-						if (var_mat[mVar] > 250) var_mat[mVar] = 0;
 						break;
 					}
 					
@@ -335,12 +325,6 @@ int main(void)
 						break;
 						case 3:
 						if (var_mat[mVar] <= 0) var_mat[mVar] = 31;
-						break;
-						case 4:
-						if (var_mat[mVar] <= 0) var_mat[mVar] = 251;
-						break;
-						case 5:
-						if (var_mat[mVar] <= 0) var_mat[mVar] = 251;
 						break;
 					}
 					var_mat[mVar] -= 1;
@@ -716,7 +700,7 @@ uint16_t readAdc(uint8_t channel)
 }
 
 /*
-** Init and general functions
+** Initialization and general functions
 */
 
 // Initialize moving average structure
