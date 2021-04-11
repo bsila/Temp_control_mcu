@@ -23,6 +23,8 @@ static uint8_t pswSet = 0;
 static uint8_t pswUse = 0;
 static uint8_t mAccess = 0;
 static uint8_t pswError = 0;
+static uint8_t update = 0;
+static uint8_t lock = 0;
 static char password[4];
 static char tmpPassword[4];
 
@@ -68,11 +70,7 @@ uint8_t heater;
 uint16_t getMovAvg(uint16_t, movAvg_t *);
 uint16_t readAdc(uint8_t);
 void init_temp_ma(movAvg_t *, int8_t);
-void init_display();
 void init_adc();
-void init_tcnt1_1hz();
-void init_pwm();
-void set_pwm_dc(uint8_t);
 
 /*
 ** Display functions
@@ -335,6 +333,7 @@ ISR(INT0_vect) {
 		
 		// Switch between main and menu display
 		case 1:
+			if (alarms_mat[4] & lock) break;
 			fMode = !mAccess ? 4 : 2;
 		break;
 		case 2:
@@ -343,6 +342,7 @@ ISR(INT0_vect) {
 			mMode = 0;
 			mSelect = 0;
 			subMenu = 0;
+			update = 1;
 		break;
 		
 		// After password go to main display
@@ -395,7 +395,6 @@ uint16_t getMovAvg(uint16_t newSample, movAvg_t *ma)
 	// return moving average - divide the sum by 2^MOVAVG_SHIFT
 	return ma->sum >> MOVAVG_SHIFT;
 }
-
 
 // Read ADC value
 uint16_t readAdc(uint8_t channel)
@@ -495,9 +494,8 @@ int main(void)
 	alarms_mat[3] = 0;
 	alarms_mat[4] = 0;
 
-	DDRA = _BV(1) | _BV(2) | _BV(7);
+	DDRA = _BV(1) | _BV(2) | _BV(3);
 	PORTA = 0x00;
-		PORTA |= _BV(7);
 
 	PORTB = _BV(0) | _BV(1) | _BV(2);
 	DDRB = 0;
@@ -542,31 +540,49 @@ int main(void)
 		if(abs(lastDisplayedSum - movingAverage.sum) > SUM_DIFF_THOLD ) {
 			lastDisplayedSum = movingAverage.sum;
 			updateLCD = 1;
-								
+			update = 1;
+		}
+		
+		if (update){
+			update = 0;						
 			uint16_t diff = abs(var_mat[2] - temp);
 			if (diff > var_mat[3]){ 
 				switch (modeSelect) {
 					case 0:
 						if (temp > var_mat[2]) {
 							PORTA &= _BV(0);
-							break;
+							lock = 0;
+						} else {
+							PORTA |=  _BV(1);
+							lock = 1;
 						}
-						PORTA |=  _BV(1);
 					break;
 					case 1:
 						if (temp < var_mat[2]) {
 							PORTA &= _BV(0);
-							break;
+							lock = 0;
+						} else {
+							PORTA |=  _BV(2);
+							lock = 1;
 						}
-						PORTA |=  _BV(2);
 					break;
 					case 2:
+						lock = 1;
 						if (temp < var_mat[2]) {
 							PORTA |=  _BV(1);
 						} else PORTA |=  _BV(2);
 					break;
 				}
-			} else PORTA &= _BV(0);
+			} else {
+				PORTA &= _BV(0) | _BV(3);
+				lock = 0;
+			}
+			
+			if (alarms_mat[3]){
+				if (diff > alarms_mat[0] || temp > alarms_mat[1] || temp < alarms_mat[2]){
+					PORTA |= _BV(3);
+				} else PORTA &= ~_BV(3);
+			}
 		}
 		
 		// Using keys (PORTB) to control
